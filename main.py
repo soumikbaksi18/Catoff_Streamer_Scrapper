@@ -17,25 +17,70 @@ class StreamRequest(BaseModel):
     platform: str  
     top: int  
 
-def scrape_twitch_streams(game: str, region: str, top: int) -> List[dict]:
-    url = f"https://www.twitch.tv/directory/game/{game.replace(' ', '%20')}"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-    
-    streams = []
-    count = 0
-    for stream in soup.find_all("div", class_="stream"):
-        if count >= top:
-            break
-        title = stream.find("h3").text
-        link = stream.find("a")["href"]
-        streams.append({
-            "title": title,
-            "url": f"https://www.twitch.tv{link}"
-        })
-        count += 1
-    return streams
 
+def scrape_twitch_streams(game: str, region: str, top: int) -> List[dict]:
+    try:
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+
+        
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        
+        
+        url = f"https://www.twitch.tv/directory/game/{game.replace(' ', '%20')}"
+        driver.get(url)
+
+        
+        time.sleep(3)
+
+        
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+
+        
+        driver.quit()
+
+        
+        print(soup.prettify())
+
+       
+        streams = []
+        count = 0
+        for stream in soup.find_all("div", class_="ScThumbnailBrowse-thumbnail__image"):  
+            if count >= top:
+                break
+            title = stream.find("img")["alt"]
+            link = stream.find_parent("a")["href"]
+            streams.append({
+                "title": title,
+                "url": f"https://www.twitch.tv{link}"  
+            })
+            count += 1
+        
+       
+        if not streams:
+            for stream in soup.find_all("div", class_="ScThumbnailBrowse-thumbnail__image"):  
+                if count >= top:
+                    break
+                title = stream.find("img")["alt"]
+                link = stream.find_parent("a")["href"]
+                streams.append({
+                    "title": title,
+                    "url": f"https://www.twitch.tv{link}"  
+                })
+                count += 1
+        
+        if not streams:
+            raise Exception("No streams found on Twitch.")
+        
+        return streams
+
+    except Exception as e:
+        print(f"Error occurred while scraping Twitch: {e}")
+        raise HTTPException(status_code=500, detail=f"Error while fetching Twitch streams: {str(e)}")
+    
+    
 def scrape_youtube_streams(game: str, top: int) -> List[dict]:
     try:
         chrome_options = Options()
